@@ -101,7 +101,7 @@ El ciclo de vida de una `Task` es una máquina de estados estricta. Es vital ent
 *   `PENDING`: Tarea creada, esperando en cola.
 *   `CLAIMED`: Un agente ha reservado la tarea (bloqueo optimista).
 *   `IN_PROGRESS`: El agente está trabajando activamente.
-*   `REVIEW_PENDING`: Se ha enviado un *Artifact* (código) para revisión humanada.
+*   `REVIEW_PENDING`: Se ha enviado un *Artifact* (código) para revisión humada.
 *   `APPROVED`: El humano aceptó el trabajo.
 *   `REJECTED`: El humano rechazó el trabajo (con feedback).
 *   `DONE`: Tarea finalizada y archivada.
@@ -132,15 +132,17 @@ Osiris implementa la especificación MCP para permitir que cualquier IDE o Agent
 ## 🚀 Instalación y Despliegue
 
 ### Requisitos
-*   Docker Desktop & Git.
-*   Python 3.11+ (Entorno Dev).
+*   **SO**: Windows 11 (Probado y soportado nativamente).
+*   **Terminal**: PowerShell 7+ o Windows Terminal.
+*   **Docker Desktop**: Asegúrate de que WSL2 backend esté activo.
+*   **Python**: 3.11+ (Añadido al PATH).
 
 ### Despliegue Rápido (Docker)
 Este es el método recomendado para tener DB, Backend y Frontend conectados automáticamente.
 
-```bash
+```powershell
 # 1. Configuración de Entorno
-cp .env.example .env
+Copy-Item .env.example .env
 # Edita .env: Asegura contraseñas fuertes para POSTGRES_PASSWORD
 
 # 2. Iniciar Servicios
@@ -152,15 +154,15 @@ docker-compose up --build -d
 ```
 
 ### Conexión del Agente (Local)
-Para conectar tu Agente IA (ej. Windsurf/Claude) al sistema corriendo localmente:
+Para conectar tu Agente IA (ej. Windsurf/Claude) al sistema corriendo localmente en Windows.
 
-Configura tu `claude_desktop_config.json` o equivalente:
+Configura tu `claude_desktop_config.json` (usualmente en `%APPDATA%\Claude\Claude Desktop Config\config.json`):
 ```json
 {
   "mcpServers": {
     "osiris": {
       "command": "python",
-      "args": ["<ABSOLUTE_PATH>/OSIRIS/mcp-server/src/server.py"],
+      "args": ["D:\\OSIRIS\\mcp-server\\src\\server.py"],
       "env": {
         "DATABASE_URL": "postgresql+asyncpg://postgres:postgres@localhost:5432/osiris_db"
       }
@@ -168,22 +170,37 @@ Configura tu `claude_desktop_config.json` o equivalente:
   }
 }
 ```
-*Nota: El Agente corre en el host, por lo que debe poder acceder al puerto 5432 de localhost expuesto por Docker.*
+*Nota: Se asume que el repositorio está clonado en `D:\OSIRIS`. Ajusta la ruta absoluta si difiere.*
 
 ---
 
 ## 🛠 Guía de Desarrollo (Contributing)
 
-### Backend
-*   **Framework**: FastAPI.
-*   **ORM**: SQLAlchemy 2.0 (Async).
-*   **Migraciones**: `alembic upgrade head` para aplicar cambios de schema.
-*   **Tests**: Ejecutar `pytest` en `/backend`.
+### Backend (Python)
+1.  **Entorno Virtual**:
+    ```powershell
+    cd backend
+    python -m venv venv
+    .\venv\Scripts\Activate
+    pip install -r requirements.txt
+    ```
+2.  **Migraciones**: 
+    ```powershell
+    alembic upgrade head
+    ```
+3.  **Tests**: 
+    ```powershell
+    pytest
+    ```
 
-### Frontend
-*   **Framework**: Next.js 14 App Router.
-*   **Styling**: TailwindCSS.
-*   **State**: React Query + WebSockets custom hook (`useTaskWebSocket`).
+### Frontend (Node.js)
+1.  **Setup**:
+    ```powershell
+    cd frontend
+    npm install
+    npm run dev
+    ```
+2.  **Stack**: Next.js 14 App Router, TailwindCSS v4.
 
 ---
 
