@@ -1,10 +1,12 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
-from app.api.endpoints import tasks, webhooks
+from app.api.endpoints import tasks, webhooks, auth, messages
 from app.api.websockets import manager
 from app.api import deps
 
 api_router = APIRouter()
+api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
+api_router.include_router(messages.router, prefix="/messages", tags=["messages"])
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 
 @api_router.websocket("/ws/tasks/{task_id}")

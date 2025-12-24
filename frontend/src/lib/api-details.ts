@@ -1,35 +1,27 @@
 import { Task, Message, Artifact } from "@/types";
-import { MOCK_TASKS } from "./api";
+import { fetchWithAuth } from "./api";
 
-// ... existing MOCK_TASKS ...
-
-const MOCK_MESSAGES: Message[] = [
-    { id: 1, task_id: 1, sender_type: 'user', content: 'Hola, necesito la landing page.', timestamp: new Date(Date.now() - 3600000).toISOString() },
-    { id: 2, task_id: 1, sender_type: 'agent', content: 'Entendido. ¿Tienes referencias de diseño?', timestamp: new Date(Date.now() - 3500000).toISOString() },
-    { id: 3, task_id: 1, sender_type: 'user', content: 'Algo estilo Apple, muy minimalista.', timestamp: new Date(Date.now() - 3400000).toISOString() }
-];
-
-const MOCK_ARTIFACTS: Artifact[] = [
-    {
-        id: 1,
-        task_id: 1,
-        type: 'code',
-        content: '// Code for Hero Section\nexport function Hero() {\n  return <h1>Welcome to Osiris</h1>;\n}',
-        status: 'pending',
-        created_at: new Date().toISOString()
-    }
-];
+// Fallback Mock for Development if Backend fails/is empty
+const MOCK_MESSAGES: Message[] = [];
+const MOCK_ARTIFACTS: Artifact[] = [];
 
 export async function fetchTaskDetails(id: number): Promise<{ task: Task, messages: Message[], artifacts: Artifact[] } | null> {
-    // Mock fetch
-    const task = MOCK_TASKS.find(t => t.id === id);
-    if (!task) return null;
+    try {
+        console.log(`Fetching details for task ${id}...`);
+        // 1. Fetch Task Info
+        const task = await fetchWithAuth(`/tasks/${id}`);
 
-    return new Promise((resolve) => {
-        setTimeout(() => resolve({
+        // 2. Fetch Messages/Artifacts (If endpoints exist, otherwise mock empty)
+        // For now, assuming backend doesn't serve messages/artifacts yet in this endpoint
+        // You might need to add specific endpoints in backend tasks.py like /tasks/{id}/messages
+
+        return {
             task,
-            messages: MOCK_MESSAGES.filter(m => m.task_id === 1), // Return mocks for demo
-            artifacts: MOCK_ARTIFACTS.filter(a => a.task_id === 1)
-        }), 500);
-    });
+            messages: MOCK_MESSAGES, // Placeholder until backend connects
+            artifacts: MOCK_ARTIFACTS // Placeholder until backend connects
+        };
+    } catch (error) {
+        console.error("Error fetching task details:", error);
+        return null;
+    }
 }

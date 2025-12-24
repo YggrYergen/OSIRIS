@@ -10,33 +10,28 @@ El proyecto seguirá una estructura de monorepositorio estricta para mantener la
 / (root)
 ├── backend/                # Ingestion Gateway (Python/FastAPI)
 │   ├── app/
-│   │   ├── api/            # Endpoints REST y WebSockets
-│   │   ├── core/           # Configuración, Seguridad
-│   │   ├── db/             # Base de Datos (SQLAlchemy)
-│   │   ├── models/         # Modelos ORM
-│   │   └── schemas/        # Schemas Pydantic
+│   │   ├── api/            # Endpoints REST, Auth y WebSockets
+│   │   ├── core/           # Configuración, Seguridad (JWT, Hashing)
+│   │   ├── db/             # Base de Datos (SQLAlchemy Async)
+│   │   ├── models/         # Modelos ORM (User, Task, Artifact, Message)
+│   │   └── schemas/        # Schemas Pydantic (Validación)
 │   ├── alembic/            # Migraciones de BD
-│   ├── tests/
-│   ├── Dockerfile
-│   └── requirements.txt
+│   └── ...
 │
 ├── mcp-server/             # The Bridge (MCP Server Personalizado)
 │   ├── src/
-│   │   ├── server.py       # Entrada del servidor MCP
-│   │   ├── tools.py        # Definición de Herramientas
-│   │   └── resources.py    # Definición de Recursos
-│   ├── .env.example
-│   └── requirements.txt
+│   │   ├── server.py       # Entrada del servidor MCP (Tools: claim, submit)
+│   │   └── ...
 │
 ├── frontend/               # Portal de Revisión (Next.js)
 │   ├── src/
-│   │   ├── app/
-│   │   ├── components/
-│   │   └── lib/
-│   ├── package.json
+│   │   ├── app/            # App Router (Login, Register, Tasks)
+│   │   ├── components/     # UI Atómica y AuthGuard
+│   │   ├── hooks/          # useAuth (Zustand), useTaskWebSocket
+│   │   └── lib/            # api.ts (fetchWithAuth)
 │   └── ...
 │
-├── .aiexclude              # Reglas de exclusión para IA
+├── scripts/                # Scripts de utilidad (Seed, Tests, Inject)
 ├── PLAN.md                 # Arquitectura y Diseño (Este archivo)
 └── STEPS.md                # Pasos de implementación
 ```
@@ -46,30 +41,33 @@ El proyecto seguirá una estructura de monorepositorio estricta para mantener la
 ### Diagrama ER Simplificado
 
 #### `users`
-Tabla para autenticación y roles de supervisores humanos y agentes.
-*   `id` (Integer, PK): Identificador único over.
-*   `username` (String, UQ): Nombre de usuario.
+Tabla central de identidad y control de acceso.
+*   `id` (Integer, PK): Identificador único.
+*   `email` (String, UQ): Correo electrónico (identificador principal).
+*   `username` (String, UQ): Nombre de usuario/display name.
+*   `full_name` (String): Nombre completo del operador.
+*   `hashed_password` (String, Nullable): Hash para login interno.
+*   `google_id` (String, Nullable): ID único de Google para SSO.
 *   `role` (Enum): 'admin', 'supervisor', 'agent'.
+*   `is_active` (Boolean): Estado de la cuenta.
 *   `created_at` (DateTime): Timestamp de creación.
 
 #### `tasks`
 La unidad central de trabajo.
-*   `id` (Integer, PK): Identificador único de la tarea.
+*   `id` (Integer, PK).
 *   `title` (String): Título corto de la tarea.
 *   `description` (Text): Descripción completa / Prompt inicial.
 *   `status` (Enum): 'pending', 'claimed', 'in_progress', 'review_pending', 'approved', 'rejected', 'done'.
 *   `source` (Enum): 'whatsapp', 'web_chat', 'form'.
 *   `created_by` (String): Identificador del solicitante externo.
 *   `assigned_to` (Integer, FK -> users.id): Agente o humano asignado.
-*   `created_at` (DateTime): Fecha de ingreso.
-*   `updated_at` (DateTime): Última actualización.
+*   `created_at` (DateTime).
 
 #### `messages`
-Registro de conversación para contexto y comunicación.
 *   `id` (Integer, PK).
 *   `task_id` (Integer, FK -> tasks.id).
 *   `sender_type` (Enum): 'user', 'system', 'agent', 'supervisor'.
-*   `content` (Text): Contenido del mensaje.
+*   `content` (Text).
 *   `timestamp` (DateTime).
 
 #### `artifacts`
@@ -77,46 +75,36 @@ Resultados generados por el agente para revisión.
 *   `id` (Integer, PK).
 *   `task_id` (Integer, FK -> tasks.id).
 *   `type` (Enum): 'code', 'text', 'screenshot', 'diff'.
-*   `content` (Text): Contenido del artefacto o path relativo.
+*   `content` (Text): Snippet de código o referencia.
 *   `status` (Enum): 'pending', 'approved', 'rejected'.
-*   `created_at` (DateTime).
 
 ## 4. COMPONENTES Y RESPONSABILIDADES
 
-### A. Backend (Ingestion Gateway)
-*   **Tech Stack**: Python 3.10+, FastAPI, SQLAlchemy (Async), Alembic, Uvicorn.
+### A. Backend (Ingestion & Intelligence Gateway)
+*   **Tech Stack**: Python 3.11, FastAPI, SQLAlchemy (Async), Alembic.
+*   **Seguridad**: Hashing con Passlib (bcrypt), Tokens con Jose (JWT).
 *   **Funciones**:
-    *   Recibir Webhooks de fuentes externas.
-    *   Mantener el estado real de la base de datos.
-    *   Exponer API REST para el Frontend.
-    *   Manejar WebSockets para actualizaciones en tiempo real al Frontend.
+    *   Ingesta de Webhooks (WhatsApp/Twilio).
+    *   **Módulo Auth**: Registro local, Login local (OAuth2 password flow), Login Google.
+    *   **Control de Acceso**: Dependencia `get_current_user` protegiendo Endpoints.
+    *   WebSockets para propagación de estado REACTIVE.
 
 ### B. MCP Server (The Bridge)
-*   **Tech Stack**: Python, `mcp` SDK (o `fastmcp`).
-*   **Funciones**: Conectar al Agente de IA con la Base de Datos del Backend.
+*   **Tech Stack**: Python, MCP SDK.
 *   **Interfaz MCP**:
-    *   **Resource**: `orchestrator://queue`
-        *   Devuelve un JSON con la lista de tareas con status='pending'.
-    *   **Tool**: `claim_ticket(task_id: int)`
-        *   Cambia status a 'claimed' y asigna al agente.
-    *   **Tool**: `submit_artifact(task_id: int, content: str, type: str)`
-        *   Crea un registro en `artifacts` y cambia tarea a 'review_pending'.
-    *   **Tool**: `send_message(task_id: int, text: str)`
-        *   Inserta un mensaje en `messages` para que lo vea el humano o se reenvíe al origen.
+    *   **Resource**: `orchestrator://queue` (Lectura de cola).
+    *   **Tool**: `claim_ticket(task_id)` / `submit_artifact(task_id, content, type)`.
+    *   **Tool**: `send_message(task_id, text)`.
 
-### C. Frontend (Review Portal)
-*   **Tech Stack**: Next.js 14, TailwindCSS, Shadcn/UI (opcional), Lucide Icons.
+### C. Frontend (Supervisor Portal)
+*   **Tech Stack**: Next.js 14, TailwindCSS v4, Zustand, Framer Motion.
 *   **Funciones**:
-    *   Dashboard tipo Kanban o Lista para ver tickets.
-    *   Vista detallada de ticket con chat en vivo.
-    *   Interfaz de Diff/Visualización de Artefactos para Aprobar/Rechazar.
+    *   Auth Guard global: Redirección automática a `/login`.
+    *   Pantalllas de registro y login social.
+    *   Dashboard interactivo con actualización automática via WebSockets.
 
-## 5. FLUJO DE TRABAJO (Happy Path)
-1.  **Ingesta**: Llega un request via WhatsApp -> Backend crea `Task` (status='pending').
-2.  **Notificación**: Backend emite evento WS al Frontend (opcional) y actualiza DB.
-3.  **Observación**: Agente consulta recurso `orchestrator://queue` via MCP.
-4.  **Asignación**: Agente usa tool `claim_ticket(id)`.
-5.  **Ejecución**: Agente trabaja, genera código.
-6.  **Entrega**: Agente usa `submit_artifact(...)`.
-7.  **Revisión**: Humano ve el artefacto en Frontend. Aprueba.
-8.  **Finalización**: Tarea marcada como 'done'. Notificación al origen.
+## 5. FLUJO DE SEGURIDAD (HITL-Safe)
+1.  **Entrada**: Se crea una tarea vía Webhook. No requiere auth (Origen confiable/API Key).
+2.  **Claim**: Un agente intenta tomar la tarea vía MCP. Requiere conexión DB confiable o Auth Token (futuro).
+3.  **Review**: El supervisor entra al portal. Debe loguearse (Interno o Google).
+4.  **Action**: Solo solicitudes autenticadas (JWT en Header) pueden aprobar/rechazar artefactos.
