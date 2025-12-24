@@ -10,15 +10,16 @@
 
 1.  [Introducción y Filosofía](#-introducción-y-filosofía)
 2.  [Visión General del Sistema](#-visión-general-del-sistema)
-3.  [Arquitectura Técnica en Profundidad](#-arquitectura-técnica-en-profundidad)
+3.  [Capacidades y Casos de Uso](#-capacidades-y-casos-de-uso) **(Nuevo)**
+4.  [Arquitectura Técnica en Profundidad](#-arquitectura-técnica-en-profundidad)
     *   [Backend Core (FastAPI)](#1-backend-core-fastapi)
     *   [Base de Datos y Modelos](#2-base-de-datos-y-modelos)
     *   [Frontend Portal (Next.js)](#3-frontend-portal-nextjs)
     *   [Model Context Protocol (MCP) Server](#4-model-context-protocol-mcp-server)
-4.  [Flujos de Datos y Ciclo de Vida](#-flujos-de-datos-y-ciclo-de-vida)
-5.  [Instalación y Despliegue](#-instalación-y-despliegue)
-6.  [Guía Operativa](#-guía-operativa)
-7.  [Extensibilidad y Futuro](#-extensibilidad-y-futuro)
+5.  [Flujos de Datos y Ciclo de Vida](#-flujos-de-datos-y-ciclo-de-vida)
+6.  [Instalación y Despliegue](#-instalación-y-despliegue)
+7.  [Guía Operativa](#-guía-operativa)
+8.  [Extensibilidad y Futuro](#-extensibilidad-y-futuro)
 
 ---
 
@@ -43,6 +44,65 @@ El ecosistema Osiris se compone de tres pilares fundamentales que operan de form
 1.  **Ingesta (The Ear)**: Capaz de escuchar múltiples canales (WhatsApp, Slack, Email) y normalizar las solicitudes en "Tickets" estandarizados.
 2.  **Ejecución (The Hand)**: Una interfaz estandarizada vía **MCP (Model Context Protocol)** que permite a cualquier IA (Claude, GPT-4, Llama) "fichar" tareas, trabajar en su entorno local y enviar resultados.
 3.  **Control (The Eye)**: Un dashboard en tiempo real donde los humanos supervisan el progreso, chatean con los agentes y aprueban los entregables.
+
+---
+
+## ⚡ Capacidades y Casos de Uso
+
+Osiris está diseñado para manejar el ciclo completo de desarrollo en escenarios complejos. A continuación, detallamos exhaustivamente qué puede hacer el sistema y cómo opera internamente en cada caso.
+
+### Caso 1: Generación de Features "On-the-Go"
+*Escenario: Un Product Manager tiene una idea en una reunión y la envía por WhatsApp.*
+
+*   **Experiencia de Usuario:**
+    1.  El usuario envía un audio o texto a WhatsApp: *"Necesito una Landing Page para la campaña de Black Friday, estilo cyberpunk, con un contador regresivo".*
+    2.  En segundos, el Agente confirma recepción.
+    3.  Minutos después, el usuario recibe una notificación: *"Propuesta lista para revisión"*.
+    4.  El usuario (o el Tech Lead) entra al Portal Web, ve el código y la previsualización del componente.
+    5.  Si aprueba, el código se integra al repositorio.
+
+*   **Under The Hood (Flujo Técnico):**
+    1.  **Webhook**: Twilio recibe el mensaje -> POST `/api/v1/webhooks/whatsapp` en Osiris Backend.
+    2.  **Task Creation**: Se crea Tarea ID `TASK-123` con descripción y prioridad alta.
+    3.  **MCP List**: El Agente (ej. Claude en Windsurf) consulta `read_pending_tasks()` y ve la nueva tarea.
+    4.  **Claim & Work**: El Agente llama `claim_task('TASK-123')`. Genera los archivos React/Tailwind localmente.
+    5.  **Submission**: El Agente llama `submit_artifact('TASK-123', content='...')`.
+    6.  **Review**: El WebSocket alerta al Frontend. El humano revisa. Si da OK -> Estado `DONE`.
+
+### Caso 2: Corrección de Bugs y Mantenimiento
+*Escenario: Un usuario reporta un error crítico en producción a través de un formulario de soporte.*
+
+*   **Experiencia de Usuario:**
+    1.  Reporte: *"El botón de pago da error 500 en Firefox"*.
+    2.  El sistema ingesta el reporte automáticamente.
+    3.  El Agente asignado analiza el stack trace (adjunto en la tarea) y propone un fix.
+    4.  El Tech Lead revisa el "Diff" en el portal de Osiris y ve que solo cambia una línea de validación. Aprueba inmediatamente.
+
+*   **Under The Hood:**
+    1.  **Context Injection**: Al crear la tarea, Osiris puede inyectar logs o contexto adicional en el campo `description`.
+    2.  **Iterative Feedback**: Si el humano rechaza el primer fix *"Esto rompe Chrome"*, se añade un mensaje a la DB.
+    3.  **Re-Try**: El Agente lee el feedback con `read_feedback()`, ajusta el código y reenvía el artefacto. El ciclo se repite hasta la perfección.
+
+### Caso 3: Documentación de Código Legacy
+*Escenario: Un desarrollador senior quiere documentar un módulo antiguo escrito en Python.*
+
+*   **Experiencia de Usuario:**
+    1.  El Dev envía: *"Documenta exhaustivamente la clase `PaymentGateway` en `src/payments.py` siguiendo formato Google Docstring"*.
+    2.  El Agente lee el archivo (si tiene acceso al repo local) o recibe el contenido en la descripción.
+    3.  El Agente devuelve el archivo python con los docstrings añadidos.
+    4.  Revisión rápida y Merge.
+
+*   **Under The Hood:**
+    1.  **Large Payloads**: Osiris maneja grandes volúmenes de texto en `artifact.content` gracias a estar basado en almacenamiento de texto en DB (o S3 en implementaciones custom).
+    2.  **Security**: Al pasar por revisión humana, se asegura que la IA no haya alucinado métodos inexistentes o expuesto secretos en los comentarios.
+
+### Caso 4: Refactorización Arquitectónica
+*Escenario: Migración de CSS plano a TailwindCSS.*
+
+*   **Experiencia:**
+    1.  Tara masiva: *"Refactorizar componentes del Dashboard para usar utilidades de Tailwind"*.
+    2.  El Agente toma componentes uno por uno (subtareas) y envía las versiones actualizadas.
+    3.  El humano las aprueba en lote.
 
 ---
 
@@ -179,7 +239,7 @@ Para que una IA (ej. un asistente en tu IDE o terminal) pueda trabajar en Osiris
 Osiris está diseñado para ser agnóstico y extensible. Aquí se detallan los vectores de expansión para desarrolladores:
 
 ### 1. Nuevos Canales de Entrada (Inputs)
-Para añadir soporte a Slack, Telegram o Email:
+Para añadir soporte a Slack, Telegram o Emails:
 *   Crear un nuevo endpoint en `backend/app/api/endpoints/webhooks.py`.
 *   Mapear el payload entrante al esquema `TaskCreate`.
 *   No se requiere cambiar nada más; el sistema es polimórfico respecto al origen.
