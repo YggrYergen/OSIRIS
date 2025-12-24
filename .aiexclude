@@ -1,0 +1,34 @@
+# AI EXCLUDE FILE
+# Define archivos y directorios que el Agente NO debe leer ni analizar por razones de seguridad o ruido.
+
+# Secretos y Entorno
+.env
+.env.*
+*.pem
+*.key
+*.cert
+secrets.yaml
+
+# Dependencias y Builds (Ruido masivo)
+node_modules/
+.next/
+dist/
+build/
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Control de Versiones
+.git/
+.gitignore
+
+# Logs y Temporales
+*.log
+tmp/
+temp/
+coverage/
+
+# Archivos específicos de OS
+.DS_Store
+Thumbs.db
