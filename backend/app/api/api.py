@@ -1,5 +1,5 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
-from app.api.endpoints import tasks, webhooks, auth, messages, stream, brain_test
+from app.api.endpoints import tasks, webhooks, auth, messages, stream, brain_test, agent_runner
 from app.api.websockets import manager
 from app.api import deps
 
@@ -9,6 +9,7 @@ api_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 api_router.include_router(messages.router, prefix="/messages", tags=["messages"])
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 api_router.include_router(brain_test.router, prefix="/brain", tags=["brain"])
+api_router.include_router(agent_runner.router, prefix="/agent", tags=["agent"])
 # The endpoint is defined as @router.get("/stream"), so including it without prefix makes it /api/v1/stream
 api_router.include_router(stream.router, tags=["stream"])
 
