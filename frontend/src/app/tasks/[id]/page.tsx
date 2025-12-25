@@ -15,16 +15,24 @@ export default function TaskDetailPage() {
     const taskId = idStr ? parseInt(idStr) : 1;
 
     // WebSocket Integration
-    const { status: wsStatus, lastMessage } = useTaskWebSocket(taskId);
+    const { status: wsStatus, lastMessage, sendMessage, errorMessage } = useTaskWebSocket(taskId);
 
     // Initial Data Load
     const [data, setData] = useState<{ task: Task, messages: Message[], artifacts: Artifact[] } | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // Handle WS Messages log
+    // Handle WS Messages
     useEffect(() => {
-        if (lastMessage) {
-            console.log("WS Update:", lastMessage);
+        if (lastMessage && data) {
+            console.log("WS New Message:", lastMessage);
+            setData(prev => {
+                if (!prev) return null;
+                if (prev.messages.some(m => m.id === lastMessage.id)) return prev;
+                return {
+                    ...prev,
+                    messages: [...prev.messages, lastMessage]
+                };
+            });
         }
     }, [lastMessage]);
 
@@ -53,10 +61,15 @@ export default function TaskDetailPage() {
                     <div className="p-6 rounded-lg bg-white/5 border border-white/10">
                         <header className="flex justify-between items-start mb-2">
                             <h1 className="text-xl font-bold text-white">{task.title}</h1>
-                            <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded border ${wsStatus === 'connected' ? 'text-green-400 border-green-400/30' : 'text-gray-500 border-gray-500/30'
-                                }`}>
-                                {wsStatus === 'connected' ? 'LIVE' : 'OFFLINE'}
-                            </span>
+                            <div className="flex flex-col items-end">
+                                <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded border ${wsStatus === 'connected' ? 'text-green-400 border-green-400/30' :
+                                        wsStatus === 'error' ? 'text-red-400 border-red-400/30' :
+                                            'text-gray-500 border-gray-500/30'
+                                    }`}>
+                                    {wsStatus === 'connected' ? 'LIVE' : wsStatus === 'error' ? 'ERROR' : 'OFFLINE'}
+                                </span>
+                                {errorMessage && <span className="text-[9px] text-red-500 mt-1">{errorMessage}</span>}
+                            </div>
                         </header>
 
                         <p className="text-sm text-gray-400 mb-4">{task.description}</p>
@@ -68,7 +81,10 @@ export default function TaskDetailPage() {
                         </div>
                     </div>
 
-                    <ChatInterface messages={messages} />
+                    <ChatInterface
+                        messages={messages}
+                        onSendMessage={(content) => sendMessage(content, 'user')}
+                    />
                 </div>
 
                 {/* RIGHT COLUMN: Workspace & Artifacts */}

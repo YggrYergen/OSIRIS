@@ -13,10 +13,41 @@ api_router.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"]
 async def websocket_endpoint(websocket: WebSocket, task_id: int):
     await manager.connect(websocket, task_id)
     try:
+        from app.db.session import AsyncSessionLocal
+        from app.models.message import Message, SenderType
+        import json
+
         while True:
-            data = await websocket.receive_text()
-            # Echo logic or handle incoming messages from frontend defaults
-            # For now we use WS mainly for server->client pushes
-            await manager.broadcast_to_task(task_id, {"type": "ping", "data": data})
+            data_str = await websocket.receive_text()
+            try:
+                data = json.loads(data_str)
+                content = data.get("content")
+                sender_type = data.get("sender_type", "user") # default to user if not specified
+                
+                # Save to DB
+                async with AsyncSessionLocal() as session:
+                    msg = Message(
+                        task_id=task_id,
+                        content=content,
+                        sender_type=sender_type
+                    )
+                    session.add(msg)
+                    await session.commit()
+                    await session.refresh(msg)
+                    
+                    # Broadcast
+                    # We broadcast the full message object
+                    msg_dict = {
+                        "id": msg.id,
+                        "task_id": msg.task_id,
+                        "content": msg.content,
+                        "sender_type": msg.sender_type,
+                        "timestamp": msg.timestamp.isoformat() if msg.timestamp else None
+                    }
+                    await manager.broadcast_to_task(task_id, msg_dict)
+                    
+            except Exception as e:
+                print(f"Error processing WS message: {e}")
+                
     except WebSocketDisconnect:
         manager.disconnect(websocket, task_id)
