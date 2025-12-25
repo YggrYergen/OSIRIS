@@ -1,5 +1,5 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
-from app.api.endpoints import tasks, webhooks, auth, messages
+from app.api.endpoints import tasks, webhooks, auth, messages, stream
 from app.api.websockets import manager
 from app.api import deps
 
@@ -8,9 +8,12 @@ api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 api_router.include_router(messages.router, prefix="/messages", tags=["messages"])
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
+# The endpoint is define as @router.get("/stream"), so including it without prefix makes it /api/v1/stream
+api_router.include_router(stream.router, tags=["stream"])
 
 @api_router.websocket("/ws/tasks/{task_id}")
 async def websocket_endpoint(websocket: WebSocket, task_id: int):
+    # This remains for backward compat or input streaming if needed
     await manager.connect(websocket, task_id)
     try:
         from app.db.session import AsyncSessionLocal
@@ -22,9 +25,8 @@ async def websocket_endpoint(websocket: WebSocket, task_id: int):
             try:
                 data = json.loads(data_str)
                 content = data.get("content")
-                sender_type = data.get("sender_type", "user") # default to user if not specified
+                sender_type = data.get("sender_type", "user") 
                 
-                # Save to DB
                 async with AsyncSessionLocal() as session:
                     msg = Message(
                         task_id=task_id,
@@ -35,8 +37,6 @@ async def websocket_endpoint(websocket: WebSocket, task_id: int):
                     await session.commit()
                     await session.refresh(msg)
                     
-                    # Broadcast
-                    # We broadcast the full message object
                     msg_dict = {
                         "id": msg.id,
                         "task_id": msg.task_id,

@@ -1,43 +1,57 @@
 from typing import Any, Dict
-from fastapi import APIRouter, Depends, Body
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.api import deps
-from app.models.task import Task, TaskSource, TaskStatus
-from app.schemas.task import TaskCreate
-
-from app.core.logging_config import log
+from fastapi import APIRouter, Header, HTTPException, Body
+from app.core.event_bus import event_bus
+from app.schemas.events import EventTaskUpdate, EventMessage, EventType
+from pydantic import BaseModel
 
 router = APIRouter()
 
-@router.post("/whatsapp")
-async def whatsapp_webhook(
-    payload: Dict[str, Any] = Body(...),
-    db: AsyncSession = Depends(deps.get_db),
-) -> Any:
-    """
-    Receive WhatsApp webhook.
-    Expected payload: {"from": "12345", "text": "Task description"}
-    """
-    log.debug(f"Received webhook payload: {payload}")
-    
-    # Simple adapter logic
-    text = payload.get("text", "")
-    sender = payload.get("from", "unknown")
-    
-    if not text:
-        log.warning("Webhook payload missing 'text' field. Ignoring.")
-        return {"status": "ignored", "reason": "no text"}
+class WebhookPayload(BaseModel):
+    source: str
+    data: Dict[str, Any]
 
-    task_in = TaskCreate(
-        title=text[:50] + "...",
-        description=text,
-        source=TaskSource.WHATSAPP,
-        created_by=sender
-    )
+@router.post("/ingest/{source}")
+async def ingest_webhook(source: str, payload: Dict[str, Any] = Body(...)):
+    """
+    Simulates receiving a webhook from an external source (WhatsApp, Email, etc.)
+    and pushing an event to the internal Event Bus.
+    """
+    print(f"Received webhook from {source}: {payload}")
     
-    task = Task(**task_in.model_dump())
-    db.add(task)
-    await db.commit()
-    await db.refresh(task)
+    # 1. Transform Payload to Event
+    # In a real app, we would process 'source' specific logic here.
+    # For now, we assume it's a generic update or message.
     
-    return {"status": "received", "task_id": task.id}
+    event_type = payload.get("type", "system_alert")
+    
+    if event_type == "message":
+        # Simulate incoming chat message
+        event = EventMessage(
+            data={
+                "content": payload.get("content", "New message"),
+                "sender": source,
+                "sender_type": "user" # or 'system'
+            },
+            task_id=payload.get("task_id")
+        )
+    elif event_type == "task_update":
+         event = EventTaskUpdate(
+            data={
+                "status": payload.get("status"),
+                "description": f"Updated by {source}"
+            },
+            task_id=payload.get("task_id")
+        )
+    else:
+        # Generic Alert
+         # We need to construct a base event or extend schema
+         # For now using generic message type for alerts to visualize
+         event = EventMessage(
+             type=EventType.SYSTEM_ALERT,
+             data={"message": f"Alert from {source}: {payload}"}
+         )
+    
+    # 2. Publish to Bus
+    await event_bus.publish(event)
+    
+    return {"status": "accepted", "event_id": str(event.timestamp)}
