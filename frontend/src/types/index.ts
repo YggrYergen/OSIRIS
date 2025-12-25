@@ -34,3 +34,20 @@ export interface Message {
     content: string;
     timestamp: string;
 }
+
+// --- SSE & Events ---
+
+export type EventType =
+    | 'task_update'
+    | 'new_message'
+    | 'artifact_update'
+    | 'terminal_log'
+    | 'system_alert'
+    | 'ping';
+
+export interface SSEEvent {
+    type: EventType;
+    task_id?: number | null;
+    timestamp: string;
+    data: any;
+}

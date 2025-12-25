@@ -5,6 +5,8 @@ from app.services.brain.factory import BrainFactory, BrainProvider
 from app.services.tools.registry import registry
 from app.core.event_bus import event_bus
 from app.schemas.events import EventArtifact, EventLog, EventMessage, EventType
+from app.db.session import AsyncSessionLocal
+from app.models.message import Message
 
 # Setup Logger
 logger = logging.getLogger("agent_service")
@@ -48,6 +50,21 @@ class AgentService:
         if content:
             self.logger.info(f"Agent Thought: {content}")
             history.append({"role": "assistant", "content": content})
+            
+            # Persist Thought to DB
+            try:
+                async with AsyncSessionLocal() as session:
+                    msg = Message(
+                        task_id=self.task_id,
+                        content=content,
+                        sender_type="agent"
+                    )
+                    session.add(msg)
+                    await session.commit()
+            except Exception as db_err:
+                self.logger.error(f"Failed to persist agent message: {db_err}")
+
+            # Stream Thought to Frontend
             await event_bus.publish(EventMessage(
                 task_id=self.task_id,
                 data={"content": content, "sender": "agent", "sender_type": "agent"}
