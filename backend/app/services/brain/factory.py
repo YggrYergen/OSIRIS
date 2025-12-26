@@ -9,6 +9,12 @@ class BrainProvider(str, Enum):
 
 class BrainFactory:
     _instances: dict = {}
+    
+    # Supported Models Registry
+    MODELS = {
+        BrainProvider.OPENAI: ["gpt-4o", "gpt-4-turbo", "o1-preview", "o1-mini"],
+        BrainProvider.GEMINI: ["gemini-1.5-pro", "gemini-1.5-flash"]
+    }
 
     @staticmethod
     def get_brain(provider: BrainProvider, model: str = None) -> BrainInterface:

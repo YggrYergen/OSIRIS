@@ -1,6 +1,8 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from app.api.endpoints import tasks, webhooks, auth, messages, stream, brain_test, agent_runner
 from app.api.websockets import manager
+from app.services.agent_service import AgentService
+import asyncio
 from app.api import deps
 
 api_router = APIRouter()
@@ -47,7 +49,17 @@ async def websocket_endpoint(websocket: WebSocket, task_id: int):
                         "timestamp": msg.timestamp.isoformat() if msg.timestamp else None
                     }
                     await manager.broadcast_to_task(task_id, msg_dict)
-                    
+                
+                # --- AUTO-TRIGGER AGENT ---
+                # If the message comes from a user, we wake up the agent
+                if sender_type == "user":
+                    try:
+                        agent = AgentService(task_id=task_id)
+                        # Run in background to not block WS loop
+                        asyncio.create_task(agent.run_step(user_input=None)) 
+                    except Exception as agent_err:
+                        print(f"CRITICAL AGENT ERROR (Ignored to keep Chat alive): {agent_err}")
+
             except Exception as e:
                 print(f"Error processing WS message: {e}")
                 

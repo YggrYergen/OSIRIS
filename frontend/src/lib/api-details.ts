@@ -1,7 +1,7 @@
 import { Task, Message, Artifact } from "@/types";
 import { fetchWithAuth } from "./api";
 
-export async function fetchTaskDetails(id: number): Promise<{ task: Task, messages: Message[], artifacts: Artifact[] } | null> {
+export async function fetchTaskDetails(id: number): Promise<{ task: Task, messages: Message[] | null, artifacts: Artifact[] } | null> {
     try {
         console.log(`Fetching details for task ${id}...`);
 
@@ -10,11 +10,12 @@ export async function fetchTaskDetails(id: number): Promise<{ task: Task, messag
 
         // 2. Fetch Messages
         // We catch errors here to avoid blocking the whole page if messages fail
-        let messages: Message[] = [];
+        let messages: Message[] | null = null;
         try {
             messages = await fetchWithAuth(`/messages/${id}`);
         } catch (msgError) {
             console.warn("Could not fetch messages:", msgError);
+            messages = null; // Mark as failed
         }
 
         // 3. Artifacts (Placeholder for now)
@@ -22,7 +23,7 @@ export async function fetchTaskDetails(id: number): Promise<{ task: Task, messag
 
         return {
             task,
-            messages: Array.isArray(messages) ? messages : [],
+            messages: Array.isArray(messages) ? messages : null,
             artifacts
         };
     } catch (error) {

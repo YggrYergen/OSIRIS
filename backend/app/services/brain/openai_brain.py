@@ -15,14 +15,38 @@ class OpenAIBrain(BrainInterface):
         return f"OpenAI ({self._model})"
 
     async def think(self, messages: List[Dict[str, str]], tools: Optional[List[Any]] = None) -> Dict[str, Any]:
-        # Convert our generic tool definitions to OpenAI format if needed
-        # For this phase, we assume tools are passed in a compatible format or we handle conversion here.
+        # Convert generic tool definitions to OpenAI format if needed
         
-        response = await self.client.chat.completions.create(
-            model=self._model,
-            messages=messages,
-            tools=tools
-        )
+        final_messages = messages
+        api_kwargs = {
+            "model": self._model,
+            "messages": final_messages,
+        }
+
+        if self._model.startswith("o1-"):
+            # o1 models (Dec 2024+) use 'developer' role instead of 'system'.
+            # They support tools now.
+            cleaned_messages = []
+            for msg in messages:
+                role = msg["role"]
+                if role == "system":
+                    role = "developer" # Remap system to developer for o1
+                cleaned_messages.append({"role": role, "content": msg["content"]})
+            api_kwargs["messages"] = cleaned_messages
+        else:
+            # Standard GPT-4o behavior
+            pass
+
+        if tools:
+            api_kwargs["tools"] = tools
+
+        print(f"DEBUG: Calling OpenAI with model={self._model}, tools_count={len(tools) if tools else 0}")
+        
+        try:
+            response = await self.client.chat.completions.create(**api_kwargs)
+        except Exception as e:
+            print(f"ERROR calling OpenAI: {e}")
+            raise e
         
         choice = response.choices[0]
         message = choice.message

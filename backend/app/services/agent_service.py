@@ -1,6 +1,7 @@
 import logging
 import json
 from typing import Optional, Dict
+from sqlalchemy import select
 from app.services.brain.factory import BrainFactory, BrainProvider
 from app.services.tools.registry import registry
 from app.core.event_bus import event_bus
@@ -12,24 +13,51 @@ from app.models.message import Message
 logger = logging.getLogger("agent_service")
 
 class AgentService:
-    def __init__(self, task_id: int, provider: BrainProvider = BrainProvider.OPENAI):
+    def __init__(self, task_id: int, provider: BrainProvider = BrainProvider.OPENAI, model: str = None):
         self.task_id = task_id
-        self.brain = BrainFactory.get_brain(provider)
+        # Pass model to BrainFactory
+        self.brain = BrainFactory.get_brain(provider, model=model)
         self.logger = logger.getChild(f"task_{task_id}")
 
-    async def run_step(self, user_input: str, history: list = None):
+    async def load_history(self):
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(Message).where(Message.task_id == self.task_id).order_by(Message.timestamp)
+            )
+            messages = result.scalars().all()
+            history = []
+            for m in messages:
+                role = "user"
+                if m.sender_type == "agent" or m.sender_type == "assistant":
+                    role = "assistant"
+                elif m.sender_type == "system":
+                    role = "system"
+                
+                history.append({"role": role, "content": m.content})
+            return history
+
+    async def run_step(self, user_input: str = None, history: list = None):
         """
-        Executes a single turn of the agent loop.
-        1. Think (Call LLM)
-        2. Act (Execute Tools)
-        3. Notify (SSE)
+        Executes a singe turn of the agent loop.
+        If user_input is provided, it's appended to history (or history starts with it).
+        If user_input is None, we assume the latest message in context is the prompt.
         """
         if history is None:
-            history = []
+            # If no manual history provided, load from DB
+            history = await self.load_history()
         
-        # Add User Message
-        history.append({"role": "user", "content": user_input})
-        self.logger.info(f"Step Start: Input='{user_input}'")
+        if user_input:
+            history.append({"role": "user", "content": user_input})
+            self.logger.info(f"Step Start: Input='{user_input}'")
+        else:
+            self.logger.info("Step Start: Responding to existing history")
+
+        # Inject System Context (OS) if not present
+        if not any(m["role"] == "system" for m in history):
+            import sys
+            os_name = "Windows" if sys.platform == "win32" else "Linux/Mac"
+            system_msg = f"You are an AI Agent running on {os_name}. workspace_root=d:\\OSIRIS. Do NOT use /tmp or linux paths. Use relative paths or {os_name} paths."
+            history.insert(0, {"role": "system", "content": system_msg})
 
         # 1. THINK
         try:

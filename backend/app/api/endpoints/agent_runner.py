@@ -12,16 +12,17 @@ async def run_agent(task_id: int, background_tasks: BackgroundTasks, payload: Di
     """
     instruction = payload.get("instruction", "Continue working.")
     provider_str = payload.get("provider", "openai")
+    model_str = payload.get("model", None) # Optional model override
     
-    # Map string to Enum
+    # Map string to Enum (or rely on AgentService default behavior logic)
     try:
         provider = BrainProvider(provider_str)
     except ValueError:
         provider = BrainProvider.OPENAI
 
-    agent = AgentService(task_id=task_id, provider=provider)
+    agent = AgentService(task_id=task_id, provider=provider, model=model_str)
     
     # Run in background to not block request
     background_tasks.add_task(agent.run_step, instruction, [])
     
-    return {"status": "started", "task_id": task_id, "brain": provider}
+    return {"status": "started", "task_id": task_id, "brain": provider, "model": agent.brain.model_name}
